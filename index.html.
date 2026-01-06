@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Greenlight Admin Portal</title>
+    <!-- React & Tailwind CDN for Single-File Deployment -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // --- FIREBASE CONFIGURATION ---
+        // REPLACE THESE WITH YOUR ACTUAL FIREBASE PROJECT DETAILS
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const provider = new firebase.auth.GoogleAuthProvider();
+
+        const ADMIN_EMAIL = "greenlight.edu.official@gmail.com";
+
+        function App() {
+            const [user, setUser] = React.useState(null);
+            const [loading, setLoading] = React.useState(true);
+            const [records, setRecords] = React.useState([]);
+            const [newNote, setNewNote] = React.useState('');
+
+            React.useEffect(() => {
+                const unsubscribe = auth.onAuthStateChanged((u) => {
+                    setUser(u);
+                    setLoading(false);
+                });
+                return () => unsubscribe();
+            }, []);
+
+            React.useEffect(() => {
+                if (user && user.email === ADMIN_EMAIL) {
+                    const unsubscribe = db.collection('admin_records')
+                        .orderBy('createdAt', 'desc')
+                        .onSnapshot(snapshot => {
+                            setRecords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+                        });
+                    return () => unsubscribe();
+                }
+            }, [user]);
+
+            const login = () => auth.signInWithPopup(provider);
+            const logout = () => auth.signOut();
+
+            const saveRecord = async (e) => {
+                e.preventDefault();
+                if (!newNote.trim()) return;
+                await db.collection('admin_records').add({
+                    content: newNote,
+                    author: user.email,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                setNewNote('');
+            };
+
+            if (loading) return <div className="h-screen flex items-center justify-center">Loading Admin Portal...</div>;
+
+            if (!user) {
+                return (
+                    <div className="h-screen flex items-center justify-center p-6">
+                        <div className="bg-white p-8 rounded-3xl shadow-xl max-w-sm w-full text-center border">
+                            <h1 className="text-2xl font-black mb-6 text-green-700">Greenlight Admin</h1>
+                            <button onClick={login} class="w-full bg-black text-white py-4 rounded-xl font-bold">Sign in with Google</button>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (user.email !== ADMIN_EMAIL) {
+                return (
+                    <div className="h-screen flex flex-col items-center justify-center p-6 text-center">
+                        <h1 className="text-2xl font-bold text-red-600">Access Denied</h1>
+                        <p className="mb-4">Logged in as: {user.email}</p>
+                        <button onClick={logout} className="underline">Logout</button>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="max-w-2xl mx-auto p-4 sm:p-8">
+                    <div className="flex justify-between items-center mb-8">
+                        <h1 className="font-black text-xl">Admin Dashboard</h1>
+                        <button onClick={logout} className="text-sm text-gray-400">Logout</button>
+                    </div>
+
+                    <form onSubmit={saveRecord} className="mb-8 flex gap-2">
+                        <input 
+                            className="flex-1 p-4 rounded-xl border" 
+                            placeholder="Add official record..." 
+                            value={newNote}
+                            onChange={(e) => setNewNote(e.target.value)}
+                        />
+                        <button className="bg-green-600 text-white px-6 rounded-xl font-bold">Post</button>
+                    </form>
+
+                    <div className="space-y-4">
+                        {records.map(r => (
+                            <div key={r.id} className="bg-white p-6 rounded-2xl shadow-sm border">
+                                <p className="text-gray-800">{r.content}</p>
+                                <p className="text-[10px] text-gray-400 mt-2">
+                                    {r.createdAt?.toDate().toLocaleString()}
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
+
